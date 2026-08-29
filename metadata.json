@@ -1,0 +1,6 @@
+{
+  "name": "my cubes",
+  "description": "An interactive puzzle game dedicated to playing with random cubes in shape and colors with shape merging, multi-player community chat, crypto subscriptions, and AI support.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
