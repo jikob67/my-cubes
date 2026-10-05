@@ -8,7 +8,10 @@ interface WinLossModalProps {
   roundHeartsEarned: number;
   score: number;
   bestScore: number;
+  currentGridSize: number;
+  nextGridSize?: number;
   onNewRound: () => void;
+  onAdvanceNextStage?: () => void;
   onShareResult?: () => void;
   isAr: boolean;
 }
@@ -18,7 +21,10 @@ export const WinLossModal: React.FC<WinLossModalProps> = ({
   roundHeartsEarned,
   score,
   bestScore,
+  currentGridSize,
+  nextGridSize,
   onNewRound,
+  onAdvanceNextStage,
   onShareResult,
   isAr,
 }) => {
@@ -68,22 +74,18 @@ export const WinLossModal: React.FC<WinLossModalProps> = ({
 
           <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mb-1">
             {isWon
-              ? isAr
-                ? 'انتصار رائع! 🏆'
-                : 'Victorious! 🏆'
-              : isAr
-              ? 'Game Over'
-              : 'Game Over'}
+              ? (isAr ? 'اكتملت المرحلة بنجاح! 🏆' : 'Stage Completed! 🏆')
+              : (isAr ? 'Game Over' : 'Game Over')}
           </h2>
 
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-5">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mb-4">
             {isWon
-              ? isAr
-                ? 'لقد حققت أداءً مبهراً ومسحت صفوفاً وأعمدة بذكاء!'
-                : 'Outstanding strategy! You placed cubes and cleared lines brilliantly.'
-              : isAr
-              ? 'لم يعد هناك مكان صالح لوضع الأشكال المتاحة في الشبكة.'
-              : 'No more valid moves available on the grid for the remaining shapes.'}
+              ? (isAr
+                  ? `أحسنت! لقد أنهيت جميع الأشكال المتاحة في شبكة ${currentGridSize}×${currentGridSize} وتم فتح المرحلة التالية!`
+                  : `Awesome! You finished all available shapes on the ${currentGridSize}×${currentGridSize} grid and unlocked the next stage!`)
+              : (isAr
+                  ? 'لم يعد هناك مكان صالح لوضع الأشكال المتبقية في هذه الشبكة.'
+                  : 'No more valid moves available on the grid for the remaining shapes.')}
           </p>
 
           {isNewHighScore && (
@@ -118,15 +120,31 @@ export const WinLossModal: React.FC<WinLossModalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
-            <button
-              type="button"
-              id="modal-play-again-btn"
-              onClick={onNewRound}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl bg-[#00ECE3] hover:bg-cyan-300 text-slate-950 font-black text-sm transition-all duration-200 shadow-lg shadow-[#00ECE3]/30 hover:scale-102"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>{isAr ? 'إعادة اللعب ↻' : 'Play Again ↻'}</span>
-            </button>
+            {isWon && onAdvanceNextStage && nextGridSize ? (
+              <button
+                type="button"
+                id="modal-advance-stage-btn"
+                onClick={onAdvanceNextStage}
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl bg-[#00ECE3] hover:bg-cyan-300 text-slate-950 font-black text-sm transition-all duration-200 shadow-lg shadow-[#00ECE3]/30 hover:scale-102"
+              >
+                <Play className="w-4 h-4 fill-slate-950" />
+                <span>
+                  {isAr
+                    ? `الانتقال للمرحلة التالية (${nextGridSize}×${nextGridSize}) ➔`
+                    : `Next Stage (${nextGridSize}×${nextGridSize}) ➔`}
+                </span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                id="modal-play-again-btn"
+                onClick={onNewRound}
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-2xl bg-[#00ECE3] hover:bg-cyan-300 text-slate-950 font-black text-sm transition-all duration-200 shadow-lg shadow-[#00ECE3]/30 hover:scale-102"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>{isAr ? 'إعادة المحاولة ↻' : 'Try Again ↻'}</span>
+              </button>
+            )}
 
             {onShareResult && (
               <button
@@ -145,3 +163,4 @@ export const WinLossModal: React.FC<WinLossModalProps> = ({
     </div>
   );
 };
+

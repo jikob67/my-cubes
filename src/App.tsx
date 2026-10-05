@@ -43,6 +43,7 @@ import {
   Grid3X3,
   Sliders,
   Palette,
+  Lock,
 } from 'lucide-react';
 
 import {
@@ -79,6 +80,8 @@ import {
   saveStoredNotifications,
   getStoredBestScore,
   saveStoredBestScore,
+  getStoredUnlockedMaxGridSize,
+  saveStoredUnlockedMaxGridSize,
 } from './utils/storage';
 import { sounds } from './utils/sound';
 
@@ -98,7 +101,8 @@ export default function App() {
   const [isAppPolicyOpen, setIsAppPolicyOpen] = useState(false);
   const [appPolicyTab, setAppPolicyTab] = useState<'privacy' | 'terms'>('privacy');
 
-  // Game Settings & State - Starts from 4, 6, 8, 12... to infinite
+  // Game Settings & State - Starts strictly from 4x4 up to 20x20 unlocked progressively by finishing available shapes
+  const [unlockedMaxGridSize, setUnlockedMaxGridSize] = useState<number>(() => getStoredUnlockedMaxGridSize());
   const [gridSize, setGridSize] = useState<number>(4);
   const [grid, setGrid] = useState<(string | null)[][]>(() =>
     Array(4).fill(null).map(() => Array(4).fill(null))
@@ -121,6 +125,7 @@ export default function App() {
   const [roundHeartsEarned, setRoundHeartsEarned] = useState<number>(30);
   const [streakCount, setStreakCount] = useState<number>(0);
   const [gameLevel, setGameLevel] = useState<number>(1);
+  const [wavesCompletedInStage, setWavesCompletedInStage] = useState<number>(0);
 
   // Community Data
   const [posts, setPosts] = useState<PostItem[]>([]);
@@ -180,8 +185,11 @@ export default function App() {
     setPosts(getStoredPosts());
     setPublicMessages(getStoredPublicMessages());
 
-    // Initialize First Game Round
-    initNewRound(5);
+    // Initialize First Game Round starting strictly from 4x4 or unlocked max
+    const initialMax = getStoredUnlockedMaxGridSize();
+    setUnlockedMaxGridSize(initialMax);
+    setGridSize(4);
+    initNewRound(4);
   }, []);
 
   // Sync Dark mode to html element
@@ -193,10 +201,17 @@ export default function App() {
     }
   }, [isDarkMode]);
 
+  // Next grid size helper
+  const ALL_PROGRESSIVE_SIZES = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20];
+  const getNextGridSize = (currentSize: number) => {
+    const next = ALL_PROGRESSIVE_SIZES.find((s) => s > currentSize);
+    return next;
+  };
+
   // Start / Reset Game Round
   const initNewRound = (size: number = gridSize) => {
     setGrid(Array(size).fill(null).map(() => Array(size).fill(null)));
-    const shapes = generateRoundShapes(3, size <= 4 ? 'easy' : size === 5 ? 'medium' : 'hard');
+    const shapes = generateRoundShapes(3, size <= 4 ? 'easy' : size <= 7 ? 'medium' : 'hard');
     setAvailableShapes(shapes);
     setSelectedShape(null);
     setDraggingShape(null);
@@ -205,12 +220,32 @@ export default function App() {
     setRoundScore(0);
     setClearedRows([]);
     setClearedCols([]);
+    setWavesCompletedInStage(0);
   };
 
   // Change Grid Difficulty / Level
   const handleGridSizeChange = (newSize: number) => {
-    setGridSize(newSize);
-    initNewRound(newSize);
+    // Only allow unlocked stages
+    if (newSize <= unlockedMaxGridSize) {
+      setGridSize(newSize);
+      initNewRound(newSize);
+    }
+  };
+
+  // Advance to next stage upon finishing current stage
+  const handleAdvanceToNextStage = () => {
+    const nextSize = getNextGridSize(gridSize);
+    if (nextSize && nextSize <= 20) {
+      const newMax = Math.max(unlockedMaxGridSize, nextSize);
+      setUnlockedMaxGridSize(newMax);
+      saveStoredUnlockedMaxGridSize(newMax);
+      setGridSize(nextSize);
+      setGameLevel((prev) => prev + 1);
+      initNewRound(nextSize);
+    } else {
+      // Reached master stage 20x20
+      initNewRound(gridSize);
+    }
   };
 
   // Check Game Over Condition
@@ -230,7 +265,7 @@ export default function App() {
     }
   };
 
-  // Place Shape Handler with Row/Column Line Clearing and Game Over checking
+  // Place Shape Handler with Row/Column Line Clearing, wave completion and stage advancement
   const handlePlaceShape = (startR: number, startC: number, shape: Shape): boolean => {
     if (!canPlaceShape(grid, gridSize, startR, startC, shape)) {
       return false;
@@ -248,6 +283,7 @@ export default function App() {
       }
     }
 
+    // Place Shape Handler: player must fill all empty squares completely to win the stage
     sounds.playPlace();
 
     // Remove placed shape from available list
@@ -260,50 +296,70 @@ export default function App() {
     const placementPoints = shape.cubesCount * 15 + 20;
     let currentScore = roundScore + placementPoints;
 
-    // Check completed full rows and columns
-    const lineResult = checkAndClearLines(newGrid, gridSize, streakCount);
+    // Check filled and empty squares count
+    const totalSquares = gridSize * gridSize;
+    const filledSquaresCount = newGrid.reduce(
+      (acc, row) => acc + row.filter((cell) => cell !== null).length,
+      0
+    );
+    const emptySquaresCount = totalSquares - filledSquaresCount;
+    const isBoardFullyFilled = emptySquaresCount === 0;
 
-    if (lineResult.linesClearedCount > 0) {
-      // Trigger line clear visual flash
-      setClearedRows(lineResult.clearedRows);
-      setClearedCols(lineResult.clearedCols);
-      sounds.playWin();
+    setGrid(newGrid);
 
-      currentScore += lineResult.pointsEarned;
-      const newHearts = roundHeartsEarned + lineResult.heartsEarned;
-      setRoundHeartsEarned(newHearts);
-      setStreakCount((prev) => prev + 1);
+    // If all squares on the board are completely filled -> VICTORY!
+    if (isBoardFullyFilled) {
+      const stageBonus = gridSize * 100 + 150;
+      const heartsBonus = Math.max(20, gridSize * 8);
+      currentScore += stageBonus;
+      setRoundScore(currentScore);
+      setRoundHeartsEarned((prev) => prev + heartsBonus);
 
-      // Apply cleared grid after brief flash effect
-      setTimeout(() => {
-        setGrid(lineResult.newGrid);
-        setClearedRows([]);
-        setClearedCols([]);
-
-        // If all shapes in current wave are used, spawn next wave of 3 shapes
-        let activePool = remainingShapes;
-        if (remainingShapes.length === 0) {
-          activePool = generateRoundShapes(3, gridSize <= 4 ? 'easy' : gridSize === 5 ? 'medium' : 'hard');
-          setAvailableShapes(activePool);
-          setGameLevel((prev) => prev + 1);
-        }
-
-        // Check Game Over on the cleared board
-        checkGameOverState(lineResult.newGrid, activePool);
-      }, 250);
-    } else {
-      setGrid(newGrid);
-
-      // If all shapes in current wave are used, spawn next wave of 3 shapes
-      let activePool = remainingShapes;
-      if (remainingShapes.length === 0) {
-        activePool = generateRoundShapes(3, gridSize <= 4 ? 'easy' : gridSize === 5 ? 'medium' : 'hard');
-        setAvailableShapes(activePool);
-        setGameLevel((prev) => prev + 1);
+      // Unlock next stage (e.g., 4x4 -> 5x5 -> ... -> 20x20)
+      const nextSize = getNextGridSize(gridSize);
+      if (nextSize && nextSize > unlockedMaxGridSize) {
+        setUnlockedMaxGridSize(nextSize);
+        saveStoredUnlockedMaxGridSize(nextSize);
       }
 
-      // Check Game Over on updated board
-      checkGameOverState(newGrid, activePool);
+      setRoundStatus('won');
+      sounds.playWin();
+
+      if (currentScore > bestScore) {
+        setBestScore(currentScore);
+        saveStoredBestScore(currentScore);
+      }
+
+      if (currentUser) {
+        const updatedUser: UserProfile = {
+          ...currentUser,
+          score: (currentUser.score || 0) + placementPoints + stageBonus,
+          hearts: currentUser.hearts + heartsBonus,
+          wins: currentUser.wins + 1,
+          xp: currentUser.xp + 50,
+        };
+        setCurrentUser(updatedUser);
+        saveCurrentUser(updatedUser);
+      }
+
+      return true;
+    }
+
+    // If all shapes in the current wave are used up and board is not yet full, spawn next batch
+    if (remainingShapes.length === 0) {
+      const nextWaveCount = wavesCompletedInStage + 1;
+      setWavesCompletedInStage(nextWaveCount);
+
+      const nextPool = generateRoundShapes(
+        3,
+        gridSize <= 4 ? 'easy' : gridSize <= 7 ? 'medium' : 'hard',
+        emptySquaresCount
+      );
+      setAvailableShapes(nextPool);
+      checkGameOverState(newGrid, nextPool);
+    } else {
+      // Check Game Over with remaining shapes
+      checkGameOverState(newGrid, remainingShapes);
     }
 
     setRoundScore(currentScore);
@@ -694,12 +750,10 @@ export default function App() {
                     type="button"
                     id="grid-size-dec-btn"
                     onClick={() => {
-                      const allSizes = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20, 24];
-                      const prev = [...allSizes].reverse().find((s) => s < gridSize);
+                      const allSizes = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20];
+                      const prev = [...allSizes].reverse().find((s) => s < gridSize && s <= unlockedMaxGridSize);
                       if (prev && prev >= 4) {
                         handleGridSizeChange(prev);
-                      } else if (gridSize > 4) {
-                        handleGridSizeChange(gridSize - 1);
                       }
                     }}
                     disabled={gridSize <= 4}
@@ -714,38 +768,43 @@ export default function App() {
                     type="button"
                     id="grid-size-inc-btn"
                     onClick={() => {
-                      const allSizes = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20, 24];
-                      const next = allSizes.find((s) => s > gridSize);
+                      const allSizes = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20];
+                      const next = allSizes.find((s) => s > gridSize && s <= unlockedMaxGridSize);
                       if (next) {
                         handleGridSizeChange(next);
-                      } else {
-                        handleGridSizeChange(gridSize + 1);
                       }
                     }}
-                    className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-[#00ECE3] hover:text-slate-950 text-slate-700 dark:text-slate-200 font-black text-base flex items-center justify-center transition-all shadow-xs"
-                    title={isAr ? 'زيادة حجم الشبكة تدريجياً (+1)' : 'Increase grid size (+1)'}
+                    disabled={gridSize >= unlockedMaxGridSize || gridSize >= 20}
+                    className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#00ECE3] hover:text-slate-950 text-slate-700 dark:text-slate-200 font-black text-base flex items-center justify-center transition-all shadow-xs"
+                    title={isAr ? 'زيادة حجم الشبكة للمراحل المفتوحة' : 'Increase to next unlocked stage'}
                   >
                     +
                   </button>
                 </div>
               </div>
 
-              {/* Progressive Presets Ribbon (Horizontal Scrollable, No Wrapping, No Overlaps) */}
+              {/* Progressive Presets Ribbon with Locked/Unlocked indicators */}
               <div className="flex items-center gap-1.5 overflow-x-auto py-1 no-scrollbar scroll-smooth">
                 {[4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 20].map((size) => {
                   const isActive = gridSize === size;
+                  const isUnlocked = size <= unlockedMaxGridSize;
                   const totalSquares = size * size;
                   return (
                     <button
                       key={size}
                       type="button"
+                      disabled={!isUnlocked}
                       onClick={() => handleGridSizeChange(size)}
-                      className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1 ${
+                      className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
                         isActive
                           ? 'bg-[#00ECE3] text-slate-950 shadow-md shadow-[#00ECE3]/30 ring-2 ring-[#00ECE3] scale-102'
-                          : 'bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60'
+                          : isUnlocked
+                          ? 'bg-slate-100 dark:bg-slate-800/90 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60'
+                          : 'bg-slate-100/50 dark:bg-slate-800/40 text-slate-400 dark:text-slate-600 cursor-not-allowed opacity-60 border border-dashed border-slate-300 dark:border-slate-800'
                       }`}
+                      title={!isUnlocked ? (isAr ? 'أنهِ الأشكال المتاحة في المرحلة السابقة لفتح هذه الشبكة' : 'Complete available shapes in previous stage to unlock') : ''}
                     >
+                      {!isUnlocked && <Lock className="w-3 h-3 text-slate-400 dark:text-slate-600" />}
                       <span>{size}×{size}</span>
                       <span className={`text-[10px] font-normal ${isActive ? 'text-slate-900 font-bold' : 'text-slate-400'}`}>
                         ({totalSquares})
@@ -1012,7 +1071,10 @@ export default function App() {
         roundHeartsEarned={roundHeartsEarned}
         score={roundScore}
         bestScore={bestScore}
+        currentGridSize={gridSize}
+        nextGridSize={getNextGridSize(gridSize)}
         onNewRound={() => initNewRound()}
+        onAdvanceNextStage={handleAdvanceToNextStage}
         onShareResult={() => {
           setRoundStatus('playing');
           setActiveTab('community');

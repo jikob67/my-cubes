@@ -92,13 +92,28 @@ export function generateRandomShape(preferredCategory?: ShapeSizeCategory): Shap
   };
 }
 
-export function generateRoundShapes(count: number = 3, difficulty: string = 'medium'): Shape[] {
+export function generateRoundShapes(
+  count: number = 3,
+  difficulty: string = 'medium',
+  remainingEmptySquares?: number
+): Shape[] {
   const shapes: Shape[] = [];
   const numShapes = Math.max(1, Math.min(3, count));
 
   for (let i = 0; i < numShapes; i++) {
     let cat: ShapeSizeCategory;
-    if (difficulty === 'easy') {
+
+    if (remainingEmptySquares !== undefined && remainingEmptySquares <= 4) {
+      if (remainingEmptySquares <= 1) {
+        cat = 1 as ShapeSizeCategory;
+      } else if (remainingEmptySquares <= 2) {
+        cat = (i === 0 ? 1 : Math.random() < 0.6 ? 2 : 1) as ShapeSizeCategory;
+      } else if (remainingEmptySquares <= 3) {
+        cat = (i === 0 ? 1 : Math.random() < 0.5 ? 2 : 3) as ShapeSizeCategory;
+      } else {
+        cat = (i === 0 ? 1 : Math.random() < 0.4 ? 2 : Math.random() < 0.7 ? 3 : 4) as ShapeSizeCategory;
+      }
+    } else if (difficulty === 'easy') {
       // Favor 1, 2, 3 cubes
       const roll = Math.random();
       cat = (roll < 0.4 ? 1 : roll < 0.7 ? 2 : roll < 0.9 ? 3 : 4) as ShapeSizeCategory;

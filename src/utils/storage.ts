@@ -175,26 +175,13 @@ export function saveStoredPrivateChats(chats: Record<string, ChatMessage[]>) {
 export function getStoredNotifications(): AppNotification[] {
   try {
     const saved = localStorage.getItem('mycubes_notifications');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed: AppNotification[] = JSON.parse(saved);
+      // Filter out any old legacy mock notification IDs
+      return parsed.filter((n) => !['n1', 'n2', 'fake_1', 'fake_2'].includes(n.id));
+    }
   } catch (e) {}
-  return [
-    {
-      id: 'n1',
-      title: 'مكافأة ترحيبية ❤️',
-      message: 'حصلت على 50 قلب كهدية انضمام إلى مجتمع my cubes!',
-      timestamp: 'الآن',
-      type: 'reward',
-      read: false,
-    },
-    {
-      id: 'n2',
-      title: 'تحديث الجولات اليومية',
-      message: 'لديك 12 رسالة محادثة مجانية اليوم. يمكنك الاشتراك بالعملات الرقمية للمزيد.',
-      timestamp: 'منذ ساعة',
-      type: 'system',
-      read: false,
-    },
-  ];
+  return [];
 }
 
 export function saveStoredNotifications(notifs: AppNotification[]) {
@@ -214,6 +201,23 @@ export function getStoredBestScore(): number {
 export function saveStoredBestScore(score: number) {
   try {
     localStorage.setItem('mycubes_best_score', score.toString());
+  } catch (e) {}
+}
+
+export function getStoredUnlockedMaxGridSize(): number {
+  try {
+    const saved = localStorage.getItem('mycubes_max_unlocked_grid');
+    if (saved) {
+      const val = parseInt(saved, 10);
+      if (val >= 4 && val <= 20) return val;
+    }
+  } catch (e) {}
+  return 4; // Start strictly from 4x4
+}
+
+export function saveStoredUnlockedMaxGridSize(size: number) {
+  try {
+    localStorage.setItem('mycubes_max_unlocked_grid', size.toString());
   } catch (e) {}
 }
 

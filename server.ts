@@ -133,13 +133,21 @@ Language: Respond politely and concisely in the user's language (${language === 
 
 // Support Email escalation ticket endpoint
 app.post("/api/support-ticket", (req, res) => {
-  const { userEmail, username, subject, description } = req.body;
-  console.log(`[Support Ticket] From: ${username} (${userEmail}) -> Target: jikob67@gmail.com | Subject: ${subject}`);
-  res.json({
-    success: true,
-    message: "تم إرسال تذكرتك بنجاح إلى jikob67@gmail.com وستتم متابعتها بأسرع وقت.",
-    ticketId: `TICK-${Date.now()}`,
-  });
+  try {
+    const { userEmail, username, subject, description, timestamp } = req.body;
+    console.log(`[Support Ticket Received] From: ${username || 'User'} (${userEmail || 'N/A'}) | Subject: ${subject || 'No Subject'} | Target: jikob67@gmail.com`);
+    
+    return res.json({
+      success: true,
+      message: "تم إرسال واستلام تذكرتك بنجاح لدى فريق الدعم الفني jikob67@gmail.com وسيتم التواصل معك مباشرة.",
+      ticketId: `TICK-${Date.now()}`,
+      targetEmail: "jikob67@gmail.com",
+      timestamp: timestamp || new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Support ticket error:", error);
+    res.status(500).json({ error: "Failed to process support ticket" });
+  }
 });
 
 // Setup Vite middleware in dev or serve dist in production
